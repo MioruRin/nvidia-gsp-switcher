@@ -78,6 +78,30 @@ def run_as_admin():
     # 无论成功与否，当前进程都必须退出（成功的场合新进程会启动）
     sys.exit()
 
+# ---------- 系统主题检测 ----------
+def detect_system_theme():
+    """读取 Windows 个性化设置，返回 'dark' 或 'light'"""
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        ) as key:
+            apps_light, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return "light" if apps_light == 1 else "dark"
+    except Exception:
+        return "dark"  # 默认深色
+
+def get_theme_name(is_dark):
+    """根据深色/浅色返回 ttkbootstrap 主题名"""
+    return "darkly" if is_dark else "litera"
+
+def get_tag_colors(is_dark):
+    """根据主题返回 Treeview 状态标签颜色 (on_green, off_red)"""
+    if is_dark:
+        return "#00bc8c", "#e74c3c"
+    else:
+        return "#198754", "#dc3545"
+
 # ---------- 注册表操作 ----------
 BASE_KEY = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
 
@@ -132,22 +156,27 @@ def set_gsp(subkey, enable):
 
 # ---------- GUI 界面 ----------
 class GSPGUI:
-    def __init__(self, root):
+    def __init__(self, root, is_dark=True):
         self.root = root
+        self.is_dark = is_dark
         self.root.title("NVIDIA GSP 开关")
         self.root.geometry("560x420")
         self.root.resizable(True, True)
         self.root.minsize(500, 380)
 
         if HAS_TTKB:
-            self.style = Style(theme="darkly")
+            theme = get_theme_name(is_dark)
+            self.style = Style(theme=theme)
             self.ttk = ttkb
-            # 微调暗色主题 Treeview 样式
             self.style.configure("Treeview", rowheight=28, font=("Segoe UI", 10))
             self.style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
         else:
+            self.theme_bg = "#2b2b2b" if is_dark else "#f0f0f0"
+            self.theme_fg = "#ffffff" if is_dark else "#000000"
             self.style = ttk.Style()
             self.ttk = ttk
+            ttk.Style().theme_use("clam")
+            ttk.Style().configure(".", background=self.theme_bg, foreground=self.theme_fg)
 
         self.create_widgets()
         self.refresh_status()
@@ -168,7 +197,16 @@ class GSPGUI:
             header,
             text="NVIDIA GSP 功能控制",
             font=("Segoe UI", 15, "bold")
-        ).pack(anchor="w")
+        ).pack(side="left", anchor="w")
+
+        self.theme_btn_text = tk.StringVar(value="☀ 浅色" if self.is_dark else "🌙 深色")
+        theme_btn = self.ttk.Button(
+            header,
+            textvariable=self.theme_btn_text,
+            command=self.toggle_theme,
+            width=10
+        )
+        theme_btn.pack(side="right", anchor="e")
 
         # ── 显卡列表 ──
         list_frame = self.ttk.LabelFrame(self.root, text=" 检测到的 NVIDIA 显卡 ")
@@ -242,12 +280,9 @@ class GSPGUI:
             self.tree.insert("", "end", values=(dev["desc"], status_text), tags=(tag,))
 
         # 状态行染色
-        if HAS_TTKB:
-            self.tree.tag_configure("on", foreground="#00bc8c")
-            self.tree.tag_configure("off", foreground="#e74c3c")
-        else:
-            self.tree.tag_configure("on", foreground="green")
-            self.tree.tag_configure("off", foreground="red")
+        green, red = get_tag_colors(self.is_dark)
+        self.tree.tag_configure("on", foreground=green)
+        self.tree.tag_configure("off", foreground=red)
 
         self.status_text.set(f"检测到 {len(devices)} 个设备")
 
@@ -286,19 +321,39 @@ class GSPGUI:
         else:
             messagebox.showinfo(title, message)
 
+    def toggle_theme(self):
+        """切换深色/浅色主题"""
+        self.is_dark = not self.is_dark
+        if HAS_TTKB:
+            theme = get_theme_name(self.is_dark)
+            self.style.theme_use(theme)
+            self.style.configure("Treeview", rowheight=28, font=("Segoe UI", 10))
+            self.style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        else:
+            self.theme_bg = "#2b2b2b" if self.is_dark else "#f0f0f0"
+            self.theme_fg = "#ffffff" if self.is_dark else "#000000"
+            ttk.Style().theme_use("clam")
+            ttk.Style().configure(".", background=self.theme_bg, foreground=self.theme_fg)
+
+        self.theme_btn_text.set("☀ 浅色" if self.is_dark else "🌙 深色")
+        self.refresh_status()
+
 # ---------- 程序入口 ----------
 if __name__ == "__main__":
     # 第一步：确保以管理员权限运行
-    # 若由 VBS/bat 启动器传入 --admin 则信任外部已提权，跳过二次 UAC
     already_elevated = "--admin" in sys.argv
     if not is_admin() and not already_elevated:
         run_as_admin()
 
-    # 第二步：创建主窗口（已经提权成功）
+    # 第二步：检测系统主题
+    sys_theme = detect_system_theme()
+    is_dark = (sys_theme == "dark")
+
+    # 第三步：创建主窗口（已经提权成功）
     if HAS_TTKB:
-        root = ttkb.Window(themename="darkly")
+        root = ttkb.Window(themename=get_theme_name(is_dark))
     else:
         root = tk.Tk()
 
-    app = GSPGUI(root)
+    app = GSPGUI(root, is_dark=is_dark)
     root.mainloop()
