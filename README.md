@@ -28,39 +28,35 @@ GSP 是 NVIDIA RTX 30 系及更新显卡上的**独立微控制器**，负责接
 - 自动扫描系统所有 NVIDIA 显卡
 - 一键启用/禁用 GSP（修改注册表 `EnableGpuFirmware`）
 - ttkbootstrap 暗色现代化界面（回退至标准 tkinter）
-- 自动依赖安装 + UAC 管理员提权
+- 打包为独立 EXE，内嵌 UAC 提权（无需安装 Python）
+- 暗色现代化界面（ttkbootstrap），回退至标准 tkinter
 - 修改后提示重启
 
 ## 使用方法
 
-**方式一：VBS 启动器（推荐）**
+**方式一：EXE 直接运行（推荐）**
 
-双击 `NVIDIA GSP 开关.vbs` → 同意 UAC → 主界面出现
+从 [Releases](../../releases) 下载 `NVIDIA GSP 开关.exe`，双击 → UAC 确认 → 主界面出现。
 
-**方式二：命令行**
+**方式二：源码运行**
 
 ```powershell
 python gsp_switcher.py --admin
 ```
 
-**方式三：右键运行**
-
-右键 `gsp_switcher.py` → 以管理员身份运行
-
-## 依赖
+## 依赖（仅源码运行需要）
 
 - Python 3.8+
-- ttkbootstrap（脚本会自动安装，也可手动：`pip install ttkbootstrap`）
+- ttkbootstrap（pip install ttkbootstrap，脚本也会自动安装）
 
 ## 工作原理
 
 ```
-双击 .vbs
-  └─ ShellExecute("runas") → UAC 弹窗
-      └─ python gsp_switcher.py --admin
-          └─ 扫描 HKLM\...\Class\{4d36e968-...} 注册表
-              └─ 修改 EnableGpuFirmware 键值
-                  └─ 提示重启
+双击 EXE
+  └─ UAC 清单 → 管理员确认
+      └─ 扫描 HKLM\...\Class\{4d36e968-...} 注册表
+          └─ 修改 EnableGpuFirmware 键值
+              └─ 提示重启
 ```
 
 注册表路径：`HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\00XX`
